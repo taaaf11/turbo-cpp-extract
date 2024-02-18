@@ -33,7 +33,7 @@ class InstallTurbo(ft.Column):
         self.turbo_file = b""
 
     async def start(self, e):
-        await self.download_turbo_installer()
+        await self.download_turbo()
         await self.extract_turbo()
         await self.write_dosbox_conf()
 
@@ -42,7 +42,7 @@ class InstallTurbo(ft.Column):
 
         await self.update_async()
 
-    async def download_turbo_installer(self):
+    async def download_turbo(self):
         self.prog_bar_text.value = "Downloading: TURBOC3.zip"
         self.progress_bar.visible = True
         self.prog_bar_text.visible = True
@@ -106,19 +106,30 @@ class InstallTurbo(ft.Column):
 
         conf_file_path = glob.glob(os.path.join(dosbox_config_dir, "dosbox*.conf"))[0]
 
-        with open(conf_file_path, "r+") as conf_file:
-            old_conf = conf_file.read()
-            conf_file.seek(0)
+        with open(conf_file_path, "r+") as self.conf_file:
+            old_conf = self.conf_file.read()
+            last_5_lines = old_conf.split("\n")[-5:]
 
-            with open(f"{conf_file_path}.bak", "w") as old_backup:
-                old_backup.write(old_conf)
+            # user has already run the program before
+            if last_5_lines == [
+                "[autoexec]",
+                f"mount c {Path.home()}\\Documents\\TURBOC3_extract_dir",
+                "c:",
+                "cd TURBOC3\\BIN",
+                "tc.exe",
+            ]:
+                return
+
+            self.conf_file.seek(0)
+
+            with open(f"{conf_file_path}.bak", "w") as backup_file:
+                backup_file.write(old_conf)
 
             new_config = (
                 "[autoexec]\n"
                 f"mount c {Path.home()}\\Documents\\TURBOC3_extract_dir\n"
                 "c:\n"
                 "cd TURBOC3\n"
-                "cd BIN\n"
-                "tc.exe\n"
+                "tc.exe"
             )
-            conf_file.write(new_config)
+            self.conf_file.write(old_conf + "\n" + new_config)
