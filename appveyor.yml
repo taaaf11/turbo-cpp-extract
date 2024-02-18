@@ -20,8 +20,6 @@ test: off
 deploy:
   provider: GitHub
   auth_token: $(GITHUB_TOKEN)
-  on:
-    APPVEYOR_REPO_TAG: true
 
 #
 #   Windows package
