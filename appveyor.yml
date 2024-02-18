@@ -1,0 +1,39 @@
+image:
+- Visual Studio 2019
+
+skip_branch_with_pr: true
+stack: python 3.10
+
+environment:
+  GITHUB_TOKEN:
+    secure: pZ9gdjFXUOrsnPgUwb7wRxa/0Cw5WfP7c6RDte55K6QJcxYdzeUovzioxZgKRDNg
+
+install:
+- pip install -r requirements.txt
+
+build_script:
+- flet pack main.py --name turbo-dosbox-setup --product-name turbo-dosbox-setup --product-version "1.0"
+
+test: off
+
+# Publish artifacts to GitHub Releases on "tag" builds
+deploy:
+  provider: GitHub
+  auth_token: $(GITHUB_TOKEN)
+  on:
+    APPVEYOR_REPO_TAG: true
+
+#
+#   Windows package
+# 
+for:
+-
+  matrix:
+    only:
+    - image: Visual Studio 2019
+
+  after_build:
+  - 7z a turbo-cpp-setup.zip %CD%\dist\*.exe
+
+  artifacts:
+  - path: turbo-cpp-setup.zip
