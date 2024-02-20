@@ -9,36 +9,91 @@ import flet as ft
 import requests
 
 
-class InstallTurbo(ft.Column):
+class BoldTextSpan(ft.TextSpan):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.style = ft.TextStyle(weight=ft.FontWeight.BOLD)
 
-        self.start_button = ft.FilledButton(text="Install!", on_click=self.start)
+
+class InstallTurbo(ft.Column):
+    def __init__(
+        self, page: ft.Page, turbo_download_link: str | None = None, *args, **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.turbo_dl_link = (
+            turbo_download_link
+            if turbo_download_link is not None
+            else "https://github.com/taaaf11/turbo-c--for-download/raw/main/TURBOC3.zip"
+        )
+
+        self.start_btn = ft.FilledButton(text="Install!", on_click=self.start)
 
         # text to be displayed above progress bar
         self.prog_bar_text = ft.Text(weight=ft.FontWeight.BOLD, visible=False)
         self.progress_bar = ft.ProgressBar(
-            animate_opacity=ft.animation.Animation(800, ft.AnimationCurve.DECELERATE),
+            opacity=0,
+            animate_opacity=ft.animation.Animation(2000, ft.AnimationCurve.DECELERATE),
             visible=False,
         )
 
+        self.logs_container = ft.Container(
+            content=ft.ListView(auto_scroll=True, height=page.height / 4, expand=True),
+            border=ft.border.all(2, ft.colors.SECONDARY_CONTAINER),
+            border_radius=10,
+            padding=10,
+            opacity=0,
+            visible=False,
+            animate_opacity=ft.animation.Animation(2000, ft.AnimationCurve.DECELERATE),
+        )
+
         self.controls = [
-            self.start_button,
+            self.start_btn,
             ft.Column(
-                [self.prog_bar_text, self.progress_bar],
+                [
+                    ft.Column(
+                        [self.prog_bar_text, self.progress_bar],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    self.logs_container,
+                ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=30,
             ),
         ]
 
         self.turbo_file = b""
 
+        self.spacing = 30
+
+    async def do_log(self, log_: ft.TextSpan):
+        self.logs_container.content.controls.append(ft.Text(spans=[log_]))
+        await self.logs_container.update_async()
+
+    async def reset_logs(self):
+        self.logs_container.content.controls = []
+        await self.update_async()
+
     async def start(self, e):
+        await self.reset_logs()
+
+        self.logs_container.visible = True
+        self.progress_bar.visible = True
+
+        self.logs_container.opacity = 1
+        self.progress_bar.opacity = 1
+
+        await self.progress_bar.update_async()
+
+        await self.update_async()
+
         await self.download_turbo()
         await self.extract_turbo()
         await self.write_dosbox_conf()
 
         self.prog_bar_text.value = "Done!"
         self.progress_bar.opacity = 0
+
+        await self.do_log(ft.TextSpan(spans=[BoldTextSpan("Done!")]))
 
         await self.update_async()
 
@@ -49,10 +104,20 @@ class InstallTurbo(ft.Column):
 
         await self.update_async()
 
-        turbo_download_link = (
-            "https://github.com/taaaf11/turbo-c--for-download/raw/main/TURBOC3.zip"
+        await self.do_log(
+            ft.TextSpan(
+                spans=[
+                    ft.TextSpan("Downloading "),
+                    BoldTextSpan("TurboC3.zip "),
+                    ft.TextSpan("from "),
+                    BoldTextSpan(self.turbo_dl_link),
+                    ft.TextSpan("\n"),
+                ]
+            )
         )
-        r = await asyncio.to_thread(requests.get, turbo_download_link, stream=True)
+        await self.logs_container.update_async()
+
+        r = await asyncio.to_thread(requests.get, self.turbo_dl_link, stream=True)
 
         recvd_len = 0
         tot_len = int(r.headers.get("content-length"))
@@ -69,10 +134,20 @@ class InstallTurbo(ft.Column):
 
         documents_dir = os.path.join(Path.home(), "Documents")
 
+        workdir_path = os.path.join(documents_dir, "TURBOC3_extract_dir")
+
         try:
-            workdir_path = os.path.join(documents_dir, "TURBOC3_extract_dir")
             os.mkdir(workdir_path)
         except FileExistsError:
+            await self.do_log(
+                ft.TextSpan(
+                    spans=[
+                        ft.TextSpan(f"Directory "),
+                        BoldTextSpan(workdir_path),
+                        ft.TextSpan(" already exists\n"),
+                    ]
+                )
+            )
             return
 
         buff = io.BytesIO(self.turbo_file)
@@ -86,6 +161,14 @@ class InstallTurbo(ft.Column):
                 filename_compressed_size = info.compress_size
 
                 self.prog_bar_text.value = f"Extracting: {filename}"
+                await self.do_log(
+                    ft.TextSpan(
+                        spans=[
+                            ft.TextSpan("Extracting: "),
+                            BoldTextSpan(f"{filename}\n"),
+                        ]
+                    )
+                )
 
                 file.extract(info.filename, path=workdir_path)
                 extracted_size += filename_compressed_size
@@ -99,6 +182,10 @@ class InstallTurbo(ft.Column):
         await self.update_async()
 
     async def write_dosbox_conf(self):
+        await self.do_log(
+            ft.TextSpan(spans=[ft.TextSpan("Writing configuration files...\n")])
+        )
+
         dosbox_config_dir = os.path.join(os.environ["LOCALAPPDATA"], "DOSBox")
         if not os.path.exists(dosbox_config_dir):
             self.controls.append(ft.Text("Please install dosbox, then try again..."))
@@ -129,7 +216,7 @@ class InstallTurbo(ft.Column):
                 "[autoexec]\n"
                 f"mount c {Path.home()}\\Documents\\TURBOC3_extract_dir\n"
                 "c:\n"
-                "cd TURBOC3\n"
+                "cd TURBOC3\\BIN\n"
                 "tc.exe"
             )
-            self.conf_file.write(old_conf + "\n" + new_config)
+            self.conf_file.write(new_config)
